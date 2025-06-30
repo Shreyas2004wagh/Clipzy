@@ -23,8 +23,7 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 const allowedOrigin = process.env.NODE_ENV === "production" 
-  ? "https://clippa.in" 
-  : "http://localhost:5173";
+  ? "http://localhost:5173";
 
 const corsOptions: cors.CorsOptions = {
   origin: allowedOrigin,
@@ -171,7 +170,7 @@ app.post("/api/clip", async (req, res) => {
       }
 
       console.log(`[job ${id}] starting yt-dlp`);
-      const yt = spawn(path.resolve(__dirname, './bin/yt-dlp'), ytArgs);
+      const yt = spawn(path.resolve(__dirname, '../bin/yt-dlp'), ytArgs);
       yt.stderr.on('data', d => console.error(`[job ${id}]`, d.toString()));
 
       await new Promise<void>((resolve, reject) => {
@@ -362,7 +361,7 @@ app.get("/api/formats", async (req, res) => {
 
   let tempCookiesPath: string | null = null;
   try {
-    const ytDlpPath = path.resolve(__dirname, './bin/yt-dlp');
+    const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
     
     const prodCookiesPath = '/etc/secrets/cookies.txt';
     if (fs.existsSync(prodCookiesPath)) {
