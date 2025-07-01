@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 // --- Configuration ---
-const API_BASE_URL = 'https://clipzy-4o9n.onrender.com/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 // --- Type Definitions ---
 interface Format {
