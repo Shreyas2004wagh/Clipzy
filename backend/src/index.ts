@@ -124,6 +124,9 @@ app.post("/api/clip", async (req, res) => {
       if (subtitles) ytArgs.push("--write-subs", "--write-auto-subs", "--sub-lang", "en", "--sub-format", "vtt");
       
       const yt = spawn("yt-dlp", ytArgs);      
+      yt.stderr.on("data", (data) => {
+        console.error(`[yt-dlp][job ${id}] ${data}`);
+      });      
       await new Promise<void>((resolve, reject) => {
         yt.on('close', code => code === 0 ? resolve() : reject(new Error(`yt-dlp exited with code ${code}`)));
         yt.on('error', reject);
@@ -251,8 +254,12 @@ app.get("/api/formats", async (req, res) => {
   }
 
   try {
-    const yt = spawn("yt-dlp", ytArgs);
     const ytArgs = ['-j', '--no-warnings', url as string];
+    const yt = spawn("yt-dlp", ytArgs);
+    yt.stderr.on("data", (data) => {
+      console.error(`[yt-dlp] ${data}`);
+    });
+    
     
     let jsonData = '';
     yt.stdout.on('data', (data) => { jsonData += data.toString(); });
