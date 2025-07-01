@@ -123,7 +123,7 @@ app.post("/api/clip", async (req, res) => {
       const ytArgs = [ url, "-f", formatId || "bv[ext=mp4]+ba[ext=m4a]/best[ext=mp4]", "--download-sections", `*${startTime}-${endTime}`, "-o", outputPath, "--merge-output-format", "mp4", "--no-warnings" ];
       if (subtitles) ytArgs.push("--write-subs", "--write-auto-subs", "--sub-lang", "en", "--sub-format", "vtt");
       
-      const yt = spawn(path.resolve(__dirname, '../bin/yt-dlp'), ytArgs);
+      const yt = spawn("yt-dlp", ytArgs);      
       await new Promise<void>((resolve, reject) => {
         yt.on('close', code => code === 0 ? resolve() : reject(new Error(`yt-dlp exited with code ${code}`)));
         yt.on('error', reject);
@@ -251,10 +251,8 @@ app.get("/api/formats", async (req, res) => {
   }
 
   try {
-    const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
+    const yt = spawn("yt-dlp", ytArgs);
     const ytArgs = ['-j', '--no-warnings', url as string];
-    
-    const yt = spawn(ytDlpPath, ytArgs);
     
     let jsonData = '';
     yt.stdout.on('data', (data) => { jsonData += data.toString(); });
