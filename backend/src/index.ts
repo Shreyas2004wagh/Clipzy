@@ -202,7 +202,7 @@ app.post("/api/clip", async (req, res) => {
   })();
 });
 
-// Other endpoints (/api/clip/:id, /api/formats, etc.) remain the same
+// Other endpoints (/api/clip/:id, etc.) remain the same
 // ...
 
 app.get('/api/clip/:id', async (req, res) => {
@@ -283,7 +283,15 @@ app.get("/api/formats", async (req, res) => {
           label: f.label
         }));
         
-        return res.json({ formats: formatsForUser });
+        // --- MODIFICATION START ---
+        // Instead of just sending formats, send an object with formats and video metadata.
+        return res.json({ 
+          formats: formatsForUser,
+          thumbnail: info.thumbnail, // Send the thumbnail URL
+          title: info.title // Send the video title
+        });
+        // --- MODIFICATION END ---
+
       } catch (e) {
           return res.status(500).json({ error: 'Failed to parse yt-dlp output'});
       }

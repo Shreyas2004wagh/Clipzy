@@ -28,6 +28,12 @@ interface JobStatus {
   storagePath?: string | null;
 }
 
+// --- NEW TYPE DEFINITION ---
+interface VideoPreview {
+  thumbnail: string;
+  title: string;
+}
+
 type AspectRatio = 'original' | 'vertical' | 'square';
 
 function App() {
@@ -46,6 +52,9 @@ function App() {
   const [jobStatus, setJobStatus] = useState<JobStatus>({ status: 'idle' });
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // --- NEW STATE FOR PREVIEW ---
+  const [videoPreview, setVideoPreview] = useState<VideoPreview | null>(null);
 
   const pollIntervalRef = useRef<number | null>(null);
 
@@ -59,6 +68,7 @@ function App() {
     setError(null);
     setFormats([]);
     setSelectedFormat('');
+    setVideoPreview(null); // --- MODIFICATION: Clear previous preview on new fetch ---
     try {
       const response = await fetch(`${API_BASE_URL}/formats?url=${encodeURIComponent(url)}`);
       if (!response.ok) {
@@ -67,10 +77,18 @@ function App() {
       }
       const data = await response.json();
       setFormats(data.formats);
+      
+      // --- MODIFICATION START: Set video preview data if available ---
+      if (data.thumbnail && data.title) {
+        setVideoPreview({ thumbnail: data.thumbnail, title: data.title });
+      }
+      // --- MODIFICATION END ---
+
       // Set default to 'Best Available' which has an empty string value
       setSelectedFormat('');
     } catch (err: any) {
       setError(`Failed to fetch formats: ${err.message}`);
+      setVideoPreview(null); // --- MODIFICATION: Ensure preview is cleared on error ---
     } finally {
       setIsLoadingFormats(false);
     }
@@ -175,14 +193,23 @@ function App() {
     }
   };
 
-  // Auto-fetch formats when URL changes
+  // --- MODIFICATION: Replaced useEffect with a more robust version ---
   useEffect(() => {
-    if (url && url.length > 10) {
-      const timeoutId = setTimeout(() => {
+    const handler = setTimeout(() => {
+      // Check for a valid-looking YouTube URL before fetching
+      if (url && (url.includes('youtube.com/') || url.includes('youtu.be/'))) {
         fetchFormats();
-      }, 1000);
-      return () => clearTimeout(timeoutId);
-    }
+      } else {
+        // Clear state if the URL is empty or invalid
+        setFormats([]);
+        setSelectedFormat('');
+        setVideoPreview(null);
+      }
+    }, 500); // Debounce API calls by 500ms
+
+    return () => {
+      clearTimeout(handler);
+    };
   }, [url]);
 
   useEffect(() => {
@@ -200,10 +227,23 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-4 font-sans">
       <div className="w-full max-w-md">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <h1 className="text-4xl font-light text-white tracking-wide">
             What do you wanna clip?
           </h1>
+        </div>
+
+        {/* --- NEW: Video Preview Section --- */}
+        <div className="h-24 flex items-end justify-center pb-4">
+          {videoPreview && (
+            <div className="transition-all duration-500 ease-out">
+              <img 
+                src={videoPreview.thumbnail} 
+                alt={videoPreview.title} 
+                className="h-16 w-auto rounded-lg shadow-2xl shadow-purple-900/40 border-2 border-gray-700"
+              />
+            </div>
+          )}
         </div>
 
         {/* Main Form Card */}
