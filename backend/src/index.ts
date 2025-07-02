@@ -1,3 +1,5 @@
+// src/index.ts
+
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -23,8 +25,8 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 const allowedOrigin = process.env.NODE_ENV === "production" 
-  ? "http://localhost:5173"
-  : "http://localhost:5173"; // Allow localhost for development
+  ? "http://localhost:5173" // Replace with your production frontend URL
+  : "http://localhost:5173";
 
 const corsOptions: cors.CorsOptions = {
   origin: allowedOrigin,
@@ -110,7 +112,6 @@ app.post("/api/clip", async (req, res) => {
   const id = createJobId();
   const outputPath = path.join(uploadsDir, `clip-${id}.mp4`);
   
-  // Create job entry in Supabase
   await supabase.from('jobs').insert([{ id, user_id: userId, status: 'processing' }]);
 
   res.status(202).json({ id });
@@ -118,55 +119,53 @@ app.post("/api/clip", async (req, res) => {
   // Process video in the background
   (async () => {
     let finalJobStatus: { [key: string]: any } = {};
+    const fastPath = path.join(uploadsDir, `clip-${id}-fast.mp4`);
+    const subPath = outputPath.replace(/\.mp4$/, ".en.vtt");
+    const adjustedSubPath = path.join(uploadsDir, `clip-${id}-adjusted.vtt`);
+
     try {
       // --- 1. Download Clip with yt-dlp ---
+      console.log(`[job ${id}] Starting download with yt-dlp...`);
       const ytArgs = [ url, "-f", formatId || "bv[ext=mp4]+ba[ext=m4a]/best[ext=mp4]", "--download-sections", `*${startTime}-${endTime}`, "-o", outputPath, "--merge-output-format", "mp4", "--no-warnings" ];
       if (subtitles) ytArgs.push("--write-subs", "--write-auto-subs", "--sub-lang", "en", "--sub-format", "vtt");
       
-      const yt = spawn("yt-dlp", ytArgs);      
-      yt.stderr.on("data", (data) => {
-        console.error(`[yt-dlp][job ${id}] ${data}`);
-      });      
+      const yt = spawn(path.resolve(__dirname, '../bin/yt-dlp'), ytArgs);
       await new Promise<void>((resolve, reject) => {
-        yt.on('close', code => code === 0 ? resolve() : reject(new Error(`yt-dlp exited with code ${code}`)));
+        let errorOutput = '';
+        yt.stderr.on('data', (data) => { errorOutput += data.toString(); });
+        yt.on('close', code => code === 0 ? resolve() : reject(new Error(`yt-dlp exited with code ${code}. Details: ${errorOutput}`)));
         yt.on('error', reject);
       });
 
-      // --- 2. Process with FFmpeg (Crop, Subtitles, Re-encode) ---
-      const fastPath = path.join(uploadsDir, `clip-${id}-fast.mp4`);
-      const subPath = outputPath.replace(/\.mp4$/, ".en.vtt");
-      const subtitlesExist = fs.existsSync(subPath);
+      if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 1024) {
+          throw new Error('yt-dlp failed to download a valid video file. The time range or format might be invalid.');
+      }
+      console.log(`[job ${id}] Download complete. Starting ffmpeg processing...`);
 
+      // --- 2. Process with FFmpeg (Crop, Subtitles, Re-encode) ---
       await new Promise<void>(async (resolve, reject) => {
         const ffmpegArgs = ['-y', '-i', outputPath];
         const videoFilters: string[] = [];
+        const subtitlesExist = fs.existsSync(subPath);
 
-        // Aspect Ratio filter
         if (aspectRatio !== 'original') {
           try {
             const { width, height } = await getVideoDimensions(outputPath);
-            if (aspectRatio === 'vertical' && width / height > 9 / 16) {
-              videoFilters.push('crop=ih*9/16:ih'); // Crop landscape to vertical
-            } else if (aspectRatio === 'square') {
-              videoFilters.push(width > height ? 'crop=ih:ih' : 'crop=iw:iw'); // Crop to square
-            }
+            if (aspectRatio === 'vertical' && width / height > 9 / 16) videoFilters.push('crop=ih*9/16:ih');
+            else if (aspectRatio === 'square') videoFilters.push(width > height ? 'crop=ih:ih' : 'crop=iw:iw');
           } catch (err) { console.error(`[job ${id}] Could not get dimensions, skipping crop.`, err); }
         }
 
-        // Subtitle filter
+        // --- THE FIX FOR SUBTITLE PATHS ON WINDOWS ---
         if (subtitles && subtitlesExist) {
-          const adjustedSubPath = path.join(uploadsDir, `clip-${id}-adjusted.vtt`);
           await adjustSubtitleTimestamps(subPath, adjustedSubPath, startTime);
-          const safeSubPath = adjustedSubPath.replace(/\\/g, '/').replace(/:/g, '\\:');
-          videoFilters.push(`subtitles=${safeSubPath}`);
+          let safeSubPath = adjustedSubPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+          videoFilters.push(`subtitles=filename='${safeSubPath}'`);
         }
+        // --- END OF FIX ---
 
         if (videoFilters.length > 0) {
           ffmpegArgs.push('-vf', videoFilters.join(','));
-        }
-
-        // Codec options (re-encode if filters applied, otherwise copy)
-        if (videoFilters.length > 0) {
           ffmpegArgs.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k');
         } else {
           ffmpegArgs.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k');
@@ -174,16 +173,26 @@ app.post("/api/clip", async (req, res) => {
         
         ffmpegArgs.push('-movflags', '+faststart', fastPath);
 
+        console.log(`[job ${id}] Running command: ffmpeg ${ffmpegArgs.join(' ')}`);
         const ff = spawn('ffmpeg', ffmpegArgs);
-        ff.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exited with code ${code}`)));
+        
+        let ffmpegErrorOutput = '';
+        ff.stderr.on('data', (data) => {
+          console.error(`[job ${id}] ffmpeg stderr: ${data.toString()}`);
+          ffmpegErrorOutput += data.toString();
+        });
+
+        ff.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg exited with code ${code}. Details: ${ffmpegErrorOutput}`));
+        });
+
         ff.on('error', reject);
       });
 
-      // --- 3. Upload to Supabase ---
-      await fs.promises.unlink(outputPath).catch(()=>{});
+      // --- 3. Upload to Supabase & Cleanup ---
+      console.log(`[job ${id}] FFmpeg finished. Uploading to storage...`);
       await fs.promises.rename(fastPath, outputPath);
-      if (fs.existsSync(subPath)) await fs.promises.unlink(subPath).catch(()=>{});
-      if (fs.existsSync(path.join(uploadsDir, `clip-${id}-adjusted.vtt`))) await fs.promises.unlink(path.join(uploadsDir, `clip-${id}-adjusted.vtt`)).catch(()=>{});
       
       const objectPath = `clips/clip-${id}.mp4`;
       const fileBuffer = await fs.promises.readFile(outputPath);
@@ -191,22 +200,24 @@ app.post("/api/clip", async (req, res) => {
       if (uploadError) throw uploadError;
 
       const { data: pub } = supabase.storage.from(bucketName).getPublicUrl(objectPath);
-      await fs.promises.unlink(outputPath).catch(() => {});
-
+      
       finalJobStatus = { status: 'ready', public_url: pub.publicUrl, storage_path: objectPath };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[job ${id}] failed`, err);
       finalJobStatus = { status: 'error', error: message };
     } finally {
-      // --- 4. Update Job Status ---
+      // --- 4. Final Cleanup and Job Status Update ---
+      await fs.promises.unlink(outputPath).catch(()=>{});
+      await fs.promises.unlink(fastPath).catch(()=>{});
+      if (fs.existsSync(subPath)) await fs.promises.unlink(subPath).catch(()=>{});
+      if (fs.existsSync(adjustedSubPath)) await fs.promises.unlink(adjustedSubPath).catch(()=>{});
+
       await supabase.from('jobs').update(finalJobStatus).eq('id', id);
+      console.log(`[job ${id}] Job status updated to: ${finalJobStatus.status}`);
     }
   })();
 });
-
-// Other endpoints (/api/clip/:id, etc.) remain the same
-// ...
 
 app.get('/api/clip/:id', async (req, res) => {
   const { id } = req.params;
@@ -254,12 +265,10 @@ app.get("/api/formats", async (req, res) => {
   }
 
   try {
+    const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
     const ytArgs = ['-j', '--no-warnings', url as string];
-    const yt = spawn("yt-dlp", ytArgs);
-    yt.stderr.on("data", (data) => {
-      console.error(`[yt-dlp] ${data}`);
-    });
     
+    const yt = spawn(ytDlpPath, ytArgs);
     
     let jsonData = '';
     yt.stdout.on('data', (data) => { jsonData += data.toString(); });
@@ -288,14 +297,11 @@ app.get("/api/formats", async (req, res) => {
           label: f.label
         }));
         
-        // --- MODIFICATION START ---
-        // Instead of just sending formats, send an object with formats and video metadata.
         return res.json({ 
           formats: formatsForUser,
-          thumbnail: info.thumbnail, // Send the thumbnail URL
-          title: info.title // Send the video title
+          thumbnail: info.thumbnail,
+          title: info.title
         });
-        // --- MODIFICATION END ---
 
       } catch (e) {
           return res.status(500).json({ error: 'Failed to parse yt-dlp output'});
