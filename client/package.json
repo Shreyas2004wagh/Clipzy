@@ -1,5 +1,5 @@
 {
-  "name": "clipforge-app",
+  "name": "clipzy",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,11 +12,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google-cloud/local-auth": "^3.0.1",
+    "@react-oauth/google": "^0.12.2",
+    "googleapis": "^128.0.0",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@google-cloud/local-auth": "^3.0.1",
-    "googleapis": "^128.0.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
@@ -24,23 +25,23 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.18",
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
     "eslint": "^9.9.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",
+    "express": "^4.18.2",
+    "fluent-ffmpeg": "^2.1.2",
     "globals": "^15.9.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "nodemon": "^3.0.2",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2",
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "jsonwebtoken": "^9.0.2",
-    "concurrently": "^8.2.2",
-    "nodemon": "^3.0.2",
-    "multer": "^1.4.5-lts.1",
-    "fluent-ffmpeg": "^2.1.2",
     "ytdl-core": "^4.11.5"
   }
 }

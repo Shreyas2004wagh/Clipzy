@@ -1,450 +1,480 @@
-import React, { useState } from 'react';
-import { Play, Download, Clock, Scissors, Settings, LogOut, Upload, History, Zap, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Play, 
+  Download, 
+  ChevronDown, 
+  CheckCircle, 
+  AlertCircle, 
+  Loader2,
+  Monitor,
+  Smartphone,
+  Square,
+  Trash2,
+  ArrowLeft,
+  Scissors
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import UserProfile from './UserProfile';
 
-interface DashboardProps {
-  user: any;
-  onSignOut: () => void;
+// --- Configuration ---
+const API_BASE_URL = 'http://localhost:3001/api';
+
+// --- Type Definitions ---
+interface Format {
+  format_id: string;
+  label: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ user, onSignOut }) => {
-  const [activeTab, setActiveTab] = useState('extract');
-  const [videoUrl, setVideoUrl] = useState('');
-  const [startTime, setStartTime] = useState('00:00:00');
-  const [endTime, setEndTime] = useState('00:00:15');
-  const [quality, setQuality] = useState('720p');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState('');
-  const [downloadUrl, setDownloadUrl] = useState('');
-  const [error, setError] = useState('');
+interface JobStatus {
+  status: 'processing' | 'ready' | 'error' | 'idle';
+  url?: string | null;
+  error?: string | null;
+  storagePath?: string | null;
+}
 
-  const handleExtractClip = async () => {
-    if (!videoUrl) {
-      setError('Please enter a YouTube URL');
+interface VideoPreview {
+  thumbnail: string;
+  title: string;
+}
+
+type AspectRatio = 'original' | 'vertical' | 'square';
+
+interface DashboardProps {
+  onBackToLanding: () => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding }) => {
+  const { user } = useAuth();
+  
+  // --- State Management ---
+  const [url, setUrl] = useState('https://youtu.be/w5h4QLDkPw4');
+  const [startTime, setStartTime] = useState('00:00:05');
+  const [endTime, setEndTime] = useState('00:00:20');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('vertical');
+  const [subtitles, setSubtitles] = useState(true);
+  
+  const [formats, setFormats] = useState<Format[]>([]);
+  const [selectedFormat, setSelectedFormat] = useState<string>('');
+  const [isLoadingFormats, setIsLoadingFormats] = useState(false);
+  
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<JobStatus>({ status: 'idle' });
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [videoPreview, setVideoPreview] = useState<VideoPreview | null>(null);
+
+  const pollIntervalRef = useRef<number | null>(null);
+
+  // --- API Functions ---
+  const fetchFormats = async () => {
+    if (!url) {
+      setError('Please enter a video URL first.');
       return;
     }
-    
-    setIsProcessing(true);
-    setError('');
-    setProcessingStatus('Starting video extraction...');
-    setDownloadUrl('');
-
+    setIsLoadingFormats(true);
+    setError(null);
+    setFormats([]);
+    setSelectedFormat('');
+    setVideoPreview(null);
     try {
-      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/formats?url=${encodeURIComponent(url)}`);
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || `HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setFormats(data.formats);
       
-      const response = await fetch('http://localhost:3001/api/extract-clip', {
+      if (data.thumbnail && data.title) {
+        setVideoPreview({ thumbnail: data.thumbnail, title: data.title });
+      }
+
+      setSelectedFormat('');
+    } catch (err: any) {
+      setError(`Failed to fetch formats: ${err.message}`);
+      setVideoPreview(null);
+    } finally {
+      setIsLoadingFormats(false);
+    }
+  };
+
+  const createClip = async () => {
+    if (!url || !startTime || !endTime) {
+      setError('URL, Start Time, and End Time are required.');
+      return;
+    }
+    setJobId(null);
+    setJobStatus({ status: 'idle' });
+    setError(null);
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/clip`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          videoUrl,
-          startTime,
-          endTime,
-          quality
+          url,
+          startTime: `${startTime}.000`,
+          endTime: `${endTime}.000`,
+          subtitles,
+          formatId: selectedFormat || undefined,
+          aspectRatio,
+          userId: user?.id || `frontend-user-${Date.now()}`,
         }),
       });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setProcessingStatus('Video processing started. Please wait...');
-        
-        // Poll for completion
-        const filename = result.filename;
-        const pollInterval = setInterval(async () => {
-          try {
-            const statusResponse = await fetch(`http://localhost:3001/api/status/${filename}`, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            });
-            
-            const statusResult = await statusResponse.json();
-            
-            if (statusResult.ready) {
-              clearInterval(pollInterval);
-              setProcessingStatus('Video ready for download!');
-              setDownloadUrl(`http://localhost:3001${result.downloadUrl}`);
-              setIsProcessing(false);
-            }
-          } catch (pollError) {
-            console.error('Status check error:', pollError);
-          }
-        }, 2000);
-
-        // Stop polling after 5 minutes
-        setTimeout(() => {
-          clearInterval(pollInterval);
-          if (isProcessing) {
-            setProcessingStatus('Processing is taking longer than expected. Please try again.');
-            setIsProcessing(false);
-          }
-        }, 300000);
-
-      } else {
-        setError(result.error || 'Failed to process video');
-        setIsProcessing(false);
+      if (response.status !== 202) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to start clipping job.');
       }
-    } catch (error) {
-      console.error('Extract clip error:', error);
-      setError('Network error. Please check if the server is running.');
+      const data = await response.json();
+      setJobId(data.id);
+      setJobStatus({ status: 'processing' });
+    } catch (err: any) {
+      setError(`Error creating clip: ${err.message}`);
       setIsProcessing(false);
     }
   };
 
-  const handleDownload = () => {
-    if (downloadUrl) {
-      const token = localStorage.getItem('authToken');
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = '';
-      // Add authorization header for download
-      fetch(downloadUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+  const checkJobStatus = async (id: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/clip/${id}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          stopPolling();
+          setError(`Job ${id} not found. It may have been cleaned up.`);
+          setIsProcessing(false);
+          setJobStatus({ status: 'idle' });
         }
-      }).then(response => response.blob())
-        .then(blob => {
-          const url = window.URL.createObjectURL(blob);
-          link.href = url;
-          link.click();
-          window.URL.revokeObjectURL(url);
-        });
+        return;
+      }
+      const data: JobStatus = await response.json();
+      setJobStatus(data);
+      if (data.status === 'ready' || data.status === 'error') {
+        stopPolling();
+        setIsProcessing(false);
+      }
+    } catch (err: any) {
+      setError(`Polling error: ${err.message}`);
+      stopPolling();
+      setIsProcessing(false);
     }
   };
 
-  const recentClips = [
-    {
-      id: 1,
-      title: "Rick Astley - Never Gonna Give You Up",
-      duration: "0:15",
-      quality: "1080p",
-      date: "2 hours ago",
-      thumbnail: "https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg"
-    },
-    {
-      id: 2,
-      title: "Best Coding Practices 2025",
-      duration: "0:30",
-      quality: "720p",
-      date: "1 day ago",
-      thumbnail: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=320&h=180&fit=crop"
-    },
-    {
-      id: 3,
-      title: "React Tutorial - Advanced Hooks",
-      duration: "1:20",
-      quality: "1080p",
-      date: "3 days ago",
-      thumbnail: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=320&h=180&fit=crop"
+  const cleanupJob = async () => {
+    if (!jobId) return;
+    try {
+      await fetch(`${API_BASE_URL}/clip/${jobId}/cleanup`, { method: 'DELETE' });
+      setJobId(null);
+      setJobStatus({ status: 'idle' });
+      setFormats([]);
+    } catch (err: any) {
+      setError(`Cleanup failed: ${err.message}`);
     }
-  ];
+  };
+  
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+  
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    try {
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error('Network response was not ok');
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Download failed:", err);
+      setError("Failed to download clip. Check console for CORS errors.");
+    }
+  };
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (url && (url.includes('youtube.com/') || url.includes('youtu.be/'))) {
+        fetchFormats();
+      } else {
+        setFormats([]);
+        setSelectedFormat('');
+        setVideoPreview(null);
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [url]);
+
+  useEffect(() => {
+    if (jobId && jobStatus.status === 'processing') {
+      pollIntervalRef.current = window.setInterval(() => {
+        checkJobStatus(jobId);
+      }, 3000); 
+    }
+    return () => {
+      stopPolling();
+    };
+  }, [jobId, jobStatus.status]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(120,119,198,0.1),transparent_50%)]"></div>
-      <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_35%,rgba(255,255,255,0.02)_50%,transparent_65%)]"></div>
-      
-      {/* Header */}
-      <header className="relative z-10 border-b border-white/10 bg-black/20 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-xl flex items-center justify-center">
-                <Scissors className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-4 font-sans">
+      <div className="w-full max-w-md">
+        {/* Header with Back Button and User Profile */}
+        <div className="text-center mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={onBackToLanding}
+              className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-sm">Back</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                <Scissors className="w-5 h-5 text-white" />
               </div>
-              <div>
-                <h1 className="text-2xl font-bold">ClipForge</h1>
-                <p className="text-sm text-gray-400">Dashboard</p>
-              </div>
+              <span className="text-xl font-bold text-white">Clippa</span>
             </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
-                <img 
-                  src={user.picture} 
-                  alt={user.name}
-                  className="w-8 h-8 rounded-full"
-                />
-                <span className="text-sm font-medium">{user.name}</span>
-              </div>
-              <button
-                onClick={onSignOut}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                title="Sign Out"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+            <div className="w-20 flex justify-end">
+              <UserProfile />
             </div>
           </div>
+          <h1 className="text-4xl font-light text-white tracking-wide">
+            What do you wanna clip?
+          </h1>
+          {user && (
+            <p className="text-gray-300 text-sm mt-2">
+              Welcome back, {user.given_name || user.name}!
+            </p>
+          )}
         </div>
-      </header>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <nav className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-              <div className="space-y-2">
-                <button
-                  onClick={() => setActiveTab('extract')}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${
-                    activeTab === 'extract' 
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
-                      : 'hover:bg-white/10 text-gray-300'
-                  }`}
-                >
-                  <Scissors className="w-5 h-5" />
-                  <span>Extract Clip</span>
-                </button>
-                
-                <button
-                  onClick={() => setActiveTab('history')}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${
-                    activeTab === 'history' 
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
-                      : 'hover:bg-white/10 text-gray-300'
-                  }`}
-                >
-                  <History className="w-5 h-5" />
-                  <span>Recent Clips</span>
-                </button>
-                
-                <button
-                  onClick={() => setActiveTab('settings')}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${
-                    activeTab === 'settings' 
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
-                      : 'hover:bg-white/10 text-gray-300'
-                  }`}
-                >
-                  <Settings className="w-5 h-5" />
-                  <span>Settings</span>
-                </button>
-              </div>
-            </nav>
+        {/* Video Preview Section */}
+        <div className="h-24 flex items-end justify-center pb-4">
+          {videoPreview && (
+            <div className="transition-all duration-500 ease-out">
+              <img 
+                src={videoPreview.thumbnail} 
+                alt={videoPreview.title} 
+                className="h-16 w-auto rounded-lg shadow-2xl shadow-purple-900/40 border-2 border-gray-700"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Main Form Card */}
+        <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl p-8 border border-gray-700/60 shadow-2xl shadow-purple-900/10">
+          {/* URL Input */}
+          <div className="mb-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-900/70 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all pr-10"
+                placeholder="Enter video URL"
+              />
+              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
+            </div>
           </div>
 
-          {/* Main Content */}
-          <div className="lg:col-span-3">
-            {activeTab === 'extract' && (
-              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-8 border border-white/10">
-                <h2 className="text-2xl font-bold mb-6 flex items-center space-x-3">
-                  <Scissors className="w-6 h-6 text-blue-400" />
-                  <span>Extract YouTube Clip</span>
-                </h2>
-                
-                <div className="space-y-6">
-                  {/* URL Input */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      YouTube URL
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="url"
-                        value={videoUrl}
-                        onChange={(e) => setVideoUrl(e.target.value)}
-                        placeholder="https://www.youtube.com/watch?v=..."
-                        className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-                        disabled={isProcessing}
-                      />
-                      <Upload className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    </div>
-                  </div>
+          {/* Time Inputs */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex-1">
+              <input
+                type="text"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                placeholder="00:00:00"
+                className="w-full px-3 py-3 bg-gray-900/70 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-center"
+              />
+            </div>
+            <span className="text-gray-400 text-xs font-medium">to</span>
+            <div className="flex-1">
+              <input
+                type="text"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                placeholder="00:00:00"
+                className="w-full px-3 py-3 bg-gray-900/70 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-center"
+              />
+            </div>
+          </div>
 
-                  {/* Time Controls */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Start Time
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={startTime}
-                          onChange={(e) => setStartTime(e.target.value)}
-                          placeholder="00:00:00"
-                          className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 font-mono"
-                          disabled={isProcessing}
-                        />
-                        <Clock className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        End Time
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={endTime}
-                          onChange={(e) => setEndTime(e.target.value)}
-                          placeholder="00:00:15"
-                          className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 font-mono"
-                          disabled={isProcessing}
-                        />
-                        <Clock className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Quality
-                      </label>
-                      <select
-                        value={quality}
-                        onChange={(e) => setQuality(e.target.value)}
-                        className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-                        disabled={isProcessing}
-                      >
-                        <option value="480p" className="bg-slate-800">480p</option>
-                        <option value="720p" className="bg-slate-800">720p</option>
-                        <option value="1080p" className="bg-slate-800">1080p</option>
-                        <option value="original" className="bg-slate-800">Original</option>
-                      </select>
-                    </div>
-                  </div>
+          {/* Aspect Ratio Buttons */}
+          <div className="grid grid-cols-3 gap-2 mb-6">
+            <button
+              onClick={() => setAspectRatio('original')}
+              className={`px-4 py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm font-medium border ${
+                aspectRatio === 'original'
+                  ? 'bg-white text-black border-white'
+                  : 'bg-transparent text-gray-300 border-gray-600 hover:border-gray-500 hover:bg-gray-700/50'
+              }`}
+            >
+              <Monitor className="w-4 h-4" />
+              Original
+            </button>
+            <button
+              onClick={() => setAspectRatio('vertical')}
+              className={`px-4 py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm font-medium border ${
+                aspectRatio === 'vertical'
+                  ? 'bg-white text-black border-white'
+                  : 'bg-transparent text-gray-300 border-gray-600 hover:border-gray-500 hover:bg-gray-700/50'
+              }`}
+            >
+              <Smartphone className="w-4 h-4" />
+              Vertical
+            </button>
+            <button
+              onClick={() => setAspectRatio('square')}
+              className={`px-4 py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm font-medium border ${
+                aspectRatio === 'square'
+                  ? 'bg-white text-black border-white'
+                  : 'bg-transparent text-gray-300 border-gray-600 hover:border-gray-500 hover:bg-gray-700/50'
+              }`}
+            >
+              <Square className="w-4 h-4" />
+              Square
+            </button>
+          </div>
 
-                  {/* Error Display */}
-                  {error && (
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center space-x-3">
-                      <AlertCircle className="w-5 h-5 text-red-400" />
-                      <span className="text-red-400">{error}</span>
-                    </div>
+          {/* Quality and Subtitles Row */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-gray-300 text-xs font-medium mb-2">Quality</label>
+              <div className="relative">
+                <select
+                  value={selectedFormat}
+                  onChange={(e) => setSelectedFormat(e.target.value)}
+                  disabled={isLoadingFormats}
+                  className="w-full px-4 py-3 bg-gray-900/70 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all appearance-none pr-10"
+                >
+                  {isLoadingFormats ? (
+                    <option>Loading...</option>
+                  ) : formats.length > 0 ? (
+                    <>
+                      <option value="">Best Available</option>
+                      {formats.map((f) => (
+                        <option key={f.format_id} value={f.format_id}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </>
+                  ) : (
+                    <option>Best Available</option>
                   )}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-gray-300 text-xs font-medium mb-2">Subtitles</label>
+              <div className="flex items-center h-[46px]">
+                <button
+                  onClick={() => setSubtitles(!subtitles)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+                    subtitles ? 'bg-purple-600' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      subtitles ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="ml-3 text-gray-300 text-sm">
+                  {subtitles ? 'English only' : 'Off'}
+                </span>
+              </div>
+            </div>
+          </div>
 
-                  {/* Processing Status */}
-                  {processingStatus && (
-                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 flex items-center space-x-3">
-                      <div className="w-5 h-5 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin"></div>
-                      <span className="text-blue-400">{processingStatus}</span>
-                    </div>
-                  )}
+          {/* Create Clip Button */}
+          <button
+            onClick={createClip}
+            disabled={isProcessing || !url || !startTime || !endTime}
+            className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20"
+          >
+            {isProcessing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Play className="w-5 h-5" />
+            )}
+            {isProcessing ? 'Creating Clip...' : 'Create Clip'}
+          </button>
+        </div>
 
-                  {/* Download Ready */}
-                  {downloadUrl && (
-                    <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <CheckCircle className="w-5 h-5 text-green-400" />
-                        <span className="text-green-400">Your clip is ready for download!</span>
-                      </div>
-                      <button
-                        onClick={handleDownload}
-                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-                      >
-                        <Download className="w-4 h-4" />
-                        <span>Download</span>
-                      </button>
-                    </div>
-                  )}
+        {/* Error Message */}
+        {error && (
+          <div className="mt-4 p-4 bg-red-900/30 border border-red-500/30 rounded-xl backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          </div>
+        )}
 
-                  {/* Extract Button */}
-                  <button
-                    onClick={handleExtractClip}
-                    disabled={!videoUrl || isProcessing}
-                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl transition-all transform hover:scale-105 disabled:transform-none flex items-center justify-center space-x-3"
+        {/* Job Status */}
+        {jobId && (
+          <div className="mt-6 bg-gray-800/50 backdrop-blur-xl rounded-3xl p-6 border border-gray-700/60">
+            <div className="flex items-center gap-3 mb-4">
+              {jobStatus.status === 'ready' ? (
+                <CheckCircle className="w-6 h-6 text-green-400" />
+              ) : jobStatus.status === 'error' ? (
+                <AlertCircle className="w-6 h-6 text-red-400" />
+              ) : (
+                <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+              )}
+              <h3 className="text-white font-medium">
+                {jobStatus.status === 'ready' ? 'Clip Ready!' : 
+                 jobStatus.status === 'error' ? 'Error' : 'Processing...'}
+              </h3>
+            </div>
+
+            {jobStatus.status === 'processing' && (
+              <p className="text-gray-300 text-sm mb-4">Your clip is being generated. This might take a moment.</p>
+            )}
+
+            {jobStatus.status === 'error' && (
+              <p className="text-red-300 text-sm mb-4">{jobStatus.error}</p>
+            )}
+
+            {jobStatus.status === 'ready' && jobStatus.url && (
+              <div className="space-y-4">
+                <video 
+                  src={jobStatus.url} 
+                  controls 
+                  className="w-full rounded-2xl"
+                  style={{ maxHeight: '300px' }}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    onClick={() => handleDownload(jobStatus.url!, `clippa-${jobId}.mp4`)}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-medium hover:from-green-600 hover:to-emerald-600 transition-all duration-200 flex items-center justify-center gap-2"
                   >
-                    {isProcessing ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span>Processing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-5 h-5" />
-                        <span>Extract Clip</span>
-                      </>
-                    )}
+                    <Download className="w-4 h-4" />
+                    Download
+                  </button>
+                  <button 
+                    onClick={cleanupJob}
+                    className="px-4 py-3 bg-white/10 border border-white/20 text-gray-300 rounded-xl font-medium hover:bg-white/20 transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
-
-            {activeTab === 'history' && (
-              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-8 border border-white/10">
-                <h2 className="text-2xl font-bold mb-6 flex items-center space-x-3">
-                  <History className="w-6 h-6 text-blue-400" />
-                  <span>Recent Clips</span>
-                </h2>
-                
-                <div className="space-y-4">
-                  {recentClips.map((clip) => (
-                    <div key={clip.id} className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors">
-                      <div className="flex items-center space-x-4">
-                        <img 
-                          src={clip.thumbnail} 
-                          alt={clip.title}
-                          className="w-20 h-12 rounded-lg object-cover"
-                        />
-                        <div className="flex-1">
-                          <h3 className="font-medium text-white mb-1">{clip.title}</h3>
-                          <div className="flex items-center space-x-4 text-sm text-gray-400">
-                            <span>{clip.duration}</span>
-                            <span>{clip.quality}</span>
-                            <span>{clip.date}</span>
-                          </div>
-                        </div>
-                        <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                          <Download className="w-5 h-5 text-gray-400" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'settings' && (
-              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-8 border border-white/10">
-                <h2 className="text-2xl font-bold mb-6 flex items-center space-x-3">
-                  <Settings className="w-6 h-6 text-blue-400" />
-                  <span>Settings</span>
-                </h2>
-                
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-4">Account</h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                        <div>
-                          <p className="font-medium text-white">Email</p>
-                          <p className="text-sm text-gray-400">{user.email}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                        <div>
-                          <p className="font-medium text-white">Name</p>
-                          <p className="text-sm text-gray-400">{user.name}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-4">Preferences</h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                        <div>
-                          <p className="font-medium text-white">Default Quality</p>
-                          <p className="text-sm text-gray-400">Choose your preferred video quality</p>
-                        </div>
-                        <select className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm">
-                          <option value="720p" className="bg-slate-800">720p</option>
-                          <option value="1080p" className="bg-slate-800">1080p</option>
-                          <option value="original" className="bg-slate-800">Original</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
