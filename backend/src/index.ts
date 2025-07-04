@@ -25,7 +25,7 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 const allowedOrigin = process.env.NODE_ENV === "production" 
-  ? "http://localhost:5173" // Replace with your production frontend URL
+  ? "http://localhost:5173" 
   : "http://localhost:5173";
 
 const corsOptions: cors.CorsOptions = {
@@ -126,12 +126,14 @@ app.post("/api/clip", async (req, res) => {
     try {
       // --- 1. Download Clip with yt-dlp ---
       console.log(`[job ${id}] Starting download with yt-dlp...`);
+      const ytDlpPath = process.env.YT_DLP_PATH || 
+                       '/opt/render/project/.render/pip/bin/yt-dlp' || 
+                       'yt-dlp';
+      
       const ytArgs = [ url, "-f", formatId || "bv[ext=mp4]+ba[ext=m4a]/best[ext=mp4]", "--download-sections", `*${startTime}-${endTime}`, "-o", outputPath, "--merge-output-format", "mp4", "--no-warnings" ];
       if (subtitles) ytArgs.push("--write-subs", "--write-auto-subs", "--sub-lang", "en", "--sub-format", "vtt");
-      spawn('which', ['yt-dlp']).stdout.on('data', data => {
-        console.log(`yt-dlp found at: ${data}`);
-      });
-      const yt = spawn('yt-dlp', ytArgs);
+      
+      const yt = spawn(ytDlpPath, ytArgs);
       await new Promise<void>((resolve, reject) => {
         let errorOutput = '';
         yt.stderr.on('data', (data) => { errorOutput += data.toString(); });
@@ -267,16 +269,29 @@ app.get("/api/formats", async (req, res) => {
   }
 
   try {
-    const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
+    // Try to find yt-dlp in multiple locations
+    const ytDlpPath = process.env.YT_DLP_PATH || 
+                     '/opt/render/project/.render/pip/bin/yt-dlp' || 
+                     'yt-dlp';
+    
     const ytArgs = ['-j', '--no-warnings', url as string];
     
     const yt = spawn(ytDlpPath, ytArgs);
     
     let jsonData = '';
+    let errorOutput = '';
+    
     yt.stdout.on('data', (data) => { jsonData += data.toString(); });
+    yt.stderr.on('data', (data) => { errorOutput += data.toString(); });
 
     yt.on('close', (code) => {
-      if (code !== 0) return res.status(500).json({ error: `yt-dlp exited with code ${code}` });
+      if (code !== 0) {
+        console.error(`yt-dlp error: ${errorOutput}`);
+        return res.status(500).json({ 
+          error: `yt-dlp exited with code ${code}. Details: ${errorOutput}` 
+        });
+      }
+      
       try {
         const info = JSON.parse(jsonData);
         const videoFormats = info.formats
@@ -306,14 +321,19 @@ app.get("/api/formats", async (req, res) => {
         });
 
       } catch (e) {
-          return res.status(500).json({ error: 'Failed to parse yt-dlp output'});
+        console.error('Failed to parse yt-dlp output:', e);
+        return res.status(500).json({ error: 'Failed to parse yt-dlp output'});
       }
     });
 
-    yt.on('error', (err) => res.status(500).json({ error: 'Failed to start yt-dlp process' }));
+    yt.on('error', (err) => {
+      console.error('yt-dlp process error:', err);
+      res.status(500).json({ error: 'Failed to start yt-dlp process' });
+    });
 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    console.error('Formats endpoint error:', message);
     return res.status(500).json({ error: message });
   }
 });
