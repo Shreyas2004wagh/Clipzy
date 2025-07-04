@@ -25,7 +25,7 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 const allowedOrigin = process.env.NODE_ENV === "production" 
-  ? "http://localhost:5173" 
+  ? "https://your-frontend-domain.com" // Update this to your actual frontend URL
   : "http://localhost:5173";
 
 const corsOptions: cors.CorsOptions = {
@@ -127,7 +127,7 @@ app.post("/api/clip", async (req, res) => {
       // --- 1. Download Clip with yt-dlp ---
       console.log(`[job ${id}] Starting download with yt-dlp...`);
       const ytDlpPath = process.env.YT_DLP_PATH || 
-                       '/opt/render/project/.render/pip/bin/yt-dlp' || 
+                       '/home/render/.local/bin/yt-dlp' || 
                        'yt-dlp';
       
       const ytArgs = [ url, "-f", formatId || "bv[ext=mp4]+ba[ext=m4a]/best[ext=mp4]", "--download-sections", `*${startTime}-${endTime}`, "-o", outputPath, "--merge-output-format", "mp4", "--no-warnings" ];
@@ -271,7 +271,7 @@ app.get("/api/formats", async (req, res) => {
   try {
     // Try to find yt-dlp in multiple locations
     const ytDlpPath = process.env.YT_DLP_PATH || 
-                     '/opt/render/project/.render/pip/bin/yt-dlp' || 
+                     '/home/render/.local/bin/yt-dlp' || 
                      'yt-dlp';
     
     const ytArgs = ['-j', '--no-warnings', url as string];
