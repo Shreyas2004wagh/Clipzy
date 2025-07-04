@@ -128,8 +128,10 @@ app.post("/api/clip", async (req, res) => {
       console.log(`[job ${id}] Starting download with yt-dlp...`);
       const ytArgs = [ url, "-f", formatId || "bv[ext=mp4]+ba[ext=m4a]/best[ext=mp4]", "--download-sections", `*${startTime}-${endTime}`, "-o", outputPath, "--merge-output-format", "mp4", "--no-warnings" ];
       if (subtitles) ytArgs.push("--write-subs", "--write-auto-subs", "--sub-lang", "en", "--sub-format", "vtt");
-      
-      const yt = spawn(path.resolve(__dirname, '../bin/yt-dlp'), ytArgs);
+      spawn('which', ['yt-dlp']).stdout.on('data', data => {
+        console.log(`yt-dlp found at: ${data}`);
+      });
+      const yt = spawn('yt-dlp', ytArgs);
       await new Promise<void>((resolve, reject) => {
         let errorOutput = '';
         yt.stderr.on('data', (data) => { errorOutput += data.toString(); });

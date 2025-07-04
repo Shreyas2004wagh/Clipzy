@@ -17,7 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import UserProfile from './UserProfile';
 
 // --- Configuration ---
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'https://clipzy-4o9n.onrender.com/api';
 
 // --- Type Definitions ---
 interface Format {
