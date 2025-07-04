@@ -47,9 +47,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding }) => {
   const { user } = useAuth();
   
   // --- State Management ---
-  const [url, setUrl] = useState('https://youtu.be/w5h4QLDkPw4');
-  const [startTime, setStartTime] = useState('00:00:05');
-  const [endTime, setEndTime] = useState('00:00:20');
+  const [url, setUrl] = useState('https://youtu.be/NtXkvW33vws');
+  const [startTime, setStartTime] = useState('00:15:35');
+  const [endTime, setEndTime] = useState('00:17:02');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('vertical');
   const [subtitles, setSubtitles] = useState(true);
   
@@ -231,23 +231,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding }) => {
         {/* Header with Back Button and User Profile */}
         <div className="text-center mb-6">
           <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={onBackToLanding}
-              className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="text-sm">Back</span>
-            </button>
-            <div className="flex items-center gap-2">
+            {/* Back Button */}
+            <div className="flex-1">
+              <button
+                onClick={onBackToLanding}
+                className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                <span className="text-sm">Back</span>
+              </button>
+            </div>
+            
+            {/* Logo - Centered */}
+            <div className="flex items-center gap-2 flex-1 justify-center">
               <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
                 <Scissors className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold text-white">Clippa</span>
             </div>
-            <div className="w-20 flex justify-end">
+            
+            {/* User Profile - Right Aligned */}
+            <div className="flex-1 flex justify-end">
               <UserProfile />
             </div>
           </div>
+          
           <h1 className="text-4xl font-light text-white tracking-wide">
             What do you wanna clip?
           </h1>
