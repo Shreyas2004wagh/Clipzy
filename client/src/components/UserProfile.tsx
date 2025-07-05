@@ -8,6 +8,14 @@ const UserProfile: React.FC = () => {
 
   if (!user) return null;
 
+  const handleSignOut = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Failed to log out', error);
+    }
+  };
+
   return (
     <div className="relative">
       <button
@@ -78,7 +86,7 @@ const UserProfile: React.FC = () => {
               
               <button
                 onClick={() => {
-                  logout();
+                  handleSignOut();
                   setIsDropdownOpen(false);
                 }}
                 className="w-full flex items-center gap-3 px-3 py-3 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-xl transition-all group"

@@ -21,7 +21,7 @@ interface LandingPageProps {
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated} = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const handleGetStarted = () => {
@@ -34,12 +34,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
 
   const handleAuthSuccess = () => {
     onGetStarted();
-  };
-
-  const handleSignOut = () => {
-    logout();
-    // Optionally close any open dropdowns or modals
-    setIsAuthModalOpen(false);
   };
 
   return (
@@ -63,7 +57,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
           
           <div className="flex items-center gap-4">
             {isAuthenticated ? (
-              <UserProfile onSignOut={handleSignOut} />
+              <UserProfile/>
             ) : (
               <button 
                 onClick={() => setIsAuthModalOpen(true)}
