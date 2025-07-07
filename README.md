@@ -72,7 +72,7 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 **Backend:**
 
 ```bash
-bun run src/index.ts
+bun run src/index.ts or bun --watch src/index.ts
 ```
 
 **Frontend:**
