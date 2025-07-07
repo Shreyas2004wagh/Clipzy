@@ -1,5 +1,3 @@
----
-
 ````md
 # 🎬 Clippa – YouTube Video Clipper SaaS
 
