@@ -1,101 +1,110 @@
-Clippa or Clipzy– YouTube Video Clipper SaaS
-Clippa is a lightweight SaaS tool that allows users to clip and download specific segments of any YouTube video by simply providing the URL and desired timestamps. It trims the video on the backend using yt-dlp and ffmpeg, and instantly delivers downloadable clips — no cloud storage required.
+---
 
-✨ Features
-🎯 Precise timestamp-based clipping
+````md
+# 🎬 Clippa – YouTube Video Clipper SaaS
 
-🎥 Supports most YouTube formats via yt-dlp
+**Clippa** (or Clipzy) is a lightweight SaaS tool that allows users to clip and download specific segments of any YouTube video by simply providing the URL and desired timestamps. It trims the video on the backend using `yt-dlp` and `ffmpeg`, and instantly delivers downloadable clips — no cloud storage required.
 
-⚡ Fast, on-demand backend trimming using ffmpeg
+---
 
-🧾 Subtitles and format selection support (optional)
+## ✨ Features
 
-🧩 Clean UI built with shadcn/ui and TailwindCSS
+- ⏱️ Precise timestamp-based clipping  
+- 🎥 Supports most YouTube formats via `yt-dlp`  
+- ⚡ Fast, on-demand backend trimming using `ffmpeg`  
+- 🧾 Subtitles and format selection support (optional)  
+- 🧼 Clean UI built with `shadcn/ui` and TailwindCSS  
+- 🔐 No login, no storage — just paste and clip
 
-🧷 No login, no storage — just paste and clip
+---
 
-🧱 Tech Stack
-Frontend
-React + TypeScript
+## 🧱 Tech Stack
 
-TailwindCSS + shadcn/ui
+**Frontend**
+- React + TypeScript  
+- TailwindCSS + shadcn/ui
 
-Backend
-Express (running on Bun)
+**Backend**
+- Express (running on Bun)  
+- `yt-dlp` for video fetching  
+- `ffmpeg` for cutting and encoding  
+- Supabase for optional logging/analytics  
+- Hosted on Render
 
-yt-dlp for video fetching
+---
 
-FFmpeg for cutting and encoding
+## 🚀 Getting Started
 
-Supabase 
+### 1. Clone the repo
 
-Hosted on Render
-
-🚀 Getting Started
-1. Clone the repo
-bash
-Copy
-Edit
+```bash
 git clone https://github.com/Shreyas2004wagh/clipzy.git
 cd clippa
-2. Install dependencies
-Backend (Bun + Express):
+````
 
-bash
-Copy
-Edit
+### 2. Install dependencies
+
+**Backend (Bun + Express):**
+
+```bash
 cd backend
 bun install
-Frontend (React + TS):
+```
 
-bash
-Copy
-Edit
+**Frontend (React + TypeScript):**
+
+```bash
 cd frontend
 npm install
-3. Environment Variables
-Create a .env file in backend/:
+```
 
-env
-Copy
-Edit
+### 3. Environment Variables
+
+Create a `.env` file inside the `backend/` directory:
+
+```env
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-Optional: Add any keys required by your analytics or logging tools.
+```
 
-4. Run the app
-Backend:
+> Optional: Add any keys required by your analytics or logging tools.
 
-bash
-Copy
-Edit
-bun run src/index.ts or bun --watch src/index.ts
-Frontend (Vite):
+### 4. Run the app
 
-bash
-Copy
-Edit
+**Backend:**
+
+```bash
+bun run src/index.ts
+```
+
+**Frontend:**
+
+```bash
 cd frontend
 npm run dev
+```
 
+---
 
-🛠️ Future Improvements
-🗃️ Save clip history (if user opts in)
+## 🛠 Future Plans
 
-🧠 Smart timestamp suggestions using subtitles or GPT
+* 🗂️ Save clip history (with optional login)
+* 🧠 AI-powered timestamp suggestions
+* 🐳 Docker support
+* 📜 OpenAPI docs
 
-🌐 Deployable Docker container
+---
 
-📼 Batch clipping / playlist support
+## 🤝 Contributing
 
-💻 Contributing
-Open to contributions! Feel free to open issues or submit PRs for:
+PRs are welcome! Feel free to fork the repo and submit improvements or bug fixes.
 
-UI/UX improvements
+---
 
-Bug fixes
+## 📄 License
 
-Feature requests
+MIT © 2025 [Shreyas Wagh](https://github.com/Shreyas2004wagh)
 
-📄 License
-MIT © 2025 Shreyas Wagh
+---
+
+```
