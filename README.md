@@ -1,5 +1,5 @@
 ````md
-# 🎬 Clippa – YouTube Video Clipper SaaS
+# 🎬 Clippa or clipzy– YouTube Video Clipper SaaS
 
 **Clippa** (or Clipzy) is a lightweight SaaS tool that allows users to clip and download specific segments of any YouTube video by simply providing the URL and desired timestamps. It trims the video on the backend using `yt-dlp` and `ffmpeg`, and instantly delivers downloadable clips — no cloud storage required.
 
